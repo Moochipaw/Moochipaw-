@@ -19,21 +19,223 @@
 <footer class="footer"><div class="wrap footer-inner"><div><div class="brand">MOOCHIPAW</div><p>Little things, big love. ♡</p></div><div>Chiens · Chats · Petits animaux</div><div>Contact · Livraison · Retours · Mentions légales</div><div>© 2026 MOOCHIPAW</div></div></footer>
 <div class="drawer-bg" id="drawerBg"><aside class="drawer"><div class="drawer-head"><h2>Ton panier</h2><button class="close" id="cartClose">×</button></div><div id="cartItems"></div><div id="cartFoot"></div></aside></div>
 <script>
-const products=[
-{id:1,name:'Tapis de fouille',cat:'Chiens',price:24.90,desc:'Un jeu malin pour stimuler son flair.',emoji:'🧩',bg:'#f2e2d8',tag:'Coup de cœur'},
-{id:2,name:'Jouet interactif',cat:'Chats',price:19.90,desc:'De quoi réveiller son instinct joueur.',emoji:'🐈',bg:'#e8ecdf',tag:'Pour jouer'},
-{id:3,name:'Gourde nomade',cat:'Chiens',price:16.90,desc:'Le compagnon idéal des promenades.',emoji:'🧴',bg:'#e5edf0',tag:'Pratique'},
-{id:4,name:'Rouleau anti-poils',cat:'Maison',price:12.90,desc:'Pour garder tissus et canapés nets.',emoji:'🧹',bg:'#f4e9dc',tag:'Indispensable'},
-{id:5,name:'Tunnel de jeu',cat:'Chats',price:22.90,desc:'Une cachette pour jouer et explorer.',emoji:'🐾',bg:'#eee5ef',tag:'À explorer'},
-{id:6,name:'Jouets à ronger',cat:'Petits animaux',price:11.90,desc:'Des moments d'occupation tout doux.',emoji:'🥕',bg:'#f4e8d5',tag:'Petits amis'},
-{id:7,name:'Brosse douceur',cat:'Chiens',price:14.90,desc:'Un moment de soin tout en douceur.',emoji:'🪮',bg:'#e4ece4',tag:'Soin'},
-{id:8,name:'Balle sensorielle',cat:'Chats',price:9.90,desc:'Une petite balle pour les grandes parties.',emoji:'🧶',bg:'#f3e1e1',tag:'Petit prix'}
-];let cart=[];let active='Tout';const money=n=>n.toFixed(2).replace('.',',')+' €';
-function renderProducts(){const list=products.filter(p=>active==='Tout'||p.cat===active);document.getElementById('products').innerHTML=list.map(p=>`<article class="product"><div class="product-art" style="background:${p.bg}"><span class="tag">${p.tag}</span>${p.emoji}</div><div class="product-info"><h3>${p.name}</h3><p>${p.desc}</p><div class="price-row"><span class="price">${money(p.price)}</span><button class="add" onclick="addToCart(${p.id})">＋ Ajouter</button></div></div></article>`).join('')}
-function setFilter(v){active=v;document.querySelectorAll('.filter').forEach(b=>b.classList.toggle('active',b.dataset.filter===v));renderProducts()}
-document.querySelectorAll('.filter').forEach(b=>b.addEventListener('click',()=>setFilter(b.dataset.filter)));document.querySelectorAll('[data-cat]').forEach(a=>a.addEventListener('click',()=>setFilter(a.dataset.cat)));
-function addToCart(id){const item=cart.find(x=>x.id===id);if(item)item.qty++;else cart.push({id,qty:1});renderCart();document.getElementById('cartCount').textContent=cart.reduce((s,x)=>s+x.qty,0);openCart()}
-function changeQty(id,d){const item=cart.find(x=>x.id===id);if(item)item.qty+=d;cart=cart.filter(x=>x.qty>0);renderCart();document.getElementById('cartCount').textContent=cart.reduce((s,x)=>s+x.qty,0)}
-function renderCart(){const el=document.getElementById('cartItems'),foot=document.getElementById('cartFoot');if(!cart.length){el.innerHTML='<div class="empty">Ton panier est encore vide.<br><br>🐾<br><br><a href="#boutique" onclick="closeCart()" class="btn">DÉCOUVRIR LES PRODUITS</a></div>';foot.innerHTML='';return}el.innerHTML=cart.map(x=>{const p=products.find(y=>y.id===x.id);return `<div class="cart-line"><div><b>${p.name}</b><br><span class="notice">${money(p.price)} l’unité</span></div><div class="qty"><button onclick="changeQty(${p.id},-1)">−</button>${x.qty}<button onclick="changeQty(${p.id},1)">+</button></div></div>`}).join('');const total=cart.reduce((s,x)=>s+products.find(p=>p.id===x.id).price*x.qty,0);foot.innerHTML=`<div class="cart-total"><span>Sous-total</span><span>${money(total)}</span></div><p class="notice">Les frais de livraison seront calculés avant le paiement. Cette version est une maquette : le paiement n'est pas encore activé.</p><button class="btn" style="width:100%;margin-top:10px" onclick="alert('Le paiement sera activé après le choix du fournisseur et la configuration de la boutique. Aucune commande réelle ne peut être passée pour le moment.')">CONTINUER</button>`}
-function openCart(){document.getElementById('drawerBg').classList.add('open')}function closeCart(){document.getElementById('drawerBg').classList.remove('open')}document.getElementById('cartOpen').onclick=openCart;document.getElementById('cartClose').onclick=closeCart;document.getElementById('drawerBg').addEventListener('click',e=>{if(e.target.id==='drawerBg')closeCart()});document.getElementById('newsletter').addEventListener('submit',e=>{e.preventDefault();document.getElementById('newsMsg').textContent='Merci ! Le formulaire est une démonstration et ne collecte pas encore les adresses.'});renderProducts();renderCart();
-</script></body></html>
+const SUPABASE_URL = 'https://chfgzklhcpejafhnlibi.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_EoFwb4w-C50y6yWxwXF6jQ_xAuDPEDm';
+
+let products = [];
+let cart = [];
+let active = 'Tout';
+
+const money = n => Number(n).toFixed(2).replace('.', ',') + ' €';
+
+const escapeHTML = value =>
+  String(value ?? '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+
+function safeImage(url) {
+  try {
+    const u = new URL(url);
+    return ['https:', 'http:'].includes(u.protocol) ? u.href : '';
+  } catch { return ''; }
+}
+
+function emojiFor(category) {
+  if (category === 'Chats') return '🐱';
+  if (category === 'Chiens') return '🐶';
+  if (category === 'Petits animaux') return '🐰';
+  if (category === 'Maison') return '🏡';
+  return '🐾';
+}
+
+async function loadProducts() {
+  const status = document.getElementById('loadStatus') || {
+  textContent: '',
+  classList: { add: () => {} }
+};
+  try {
+    const response = await fetch(
+      `${SUPABASE_URL}/rest/v1/products?select=id,name,description,category,price,image_url,stock,is_active,created_at&is_active=eq.true&order=created_at.desc`,
+      {
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`
+        }
+      }
+    );
+    if (!response.ok) throw new Error('Erreur Supabase : ' + response.status);
+
+    const rows = await response.json();
+    const unique = new Map();
+
+    rows.forEach(row => {
+      const key = String(row.name || '').trim().toLowerCase();
+      if (!key || unique.has(key)) return;
+      unique.set(key, {
+        id: row.id,
+        name: row.name,
+        cat: row.category || 'Maison',
+        price: Number(row.price) || 0,
+        desc: row.description || '',
+        image: safeImage(row.image_url),
+        emoji: emojiFor(row.category)
+      });
+    });
+
+    products = [...unique.values()];
+    status.textContent = products.length
+      ? `${products.length} produit(s) chargé(s) depuis la boutique.`
+      : 'Aucun produit publié pour le moment.';
+    renderProducts();
+  } catch (error) {
+    console.error(error);
+    status.textContent = 'Impossible de charger les produits. Vérifie la connexion Supabase.';
+    status.classList.add('error');
+    document.getElementById('products').innerHTML =
+      '<p class="notice">Les produits ne sont pas disponibles pour le moment.</p>';
+  }
+}
+
+function renderProducts() {
+  const list = products.filter(p => active === 'Tout' || p.cat === active);
+  const container = document.getElementById('products');
+
+  if (!list.length) {
+    container.innerHTML = '<p class="notice">Aucun produit dans cette catégorie pour le moment.</p>';
+    return;
+  }
+
+  container.innerHTML = list.map(p => {
+    const visual = p.image
+      ? `<img src="${escapeHTML(p.image)}" alt="${escapeHTML(p.name)}" loading="lazy">`
+      : `<span>${p.emoji}</span>`;
+
+    return `
+      <article class="product">
+        <div class="product-art" style="background:#edf0e8">
+          <span class="tag">MOOCHIPAW</span>
+          ${visual}
+        </div>
+        <div class="product-info">
+          <h3>${escapeHTML(p.name)}</h3>
+          <p>${escapeHTML(p.desc)}</p>
+          <div class="price-row">
+            <span class="price">${money(p.price)}</span>
+            <button class="add" data-add="${escapeHTML(p.id)}">＋ Ajouter</button>
+          </div>
+        </div>
+      </article>`;
+  }).join('');
+}
+
+function setFilter(value) {
+  active = value;
+  document.querySelectorAll('.filter').forEach(button => {
+    button.classList.toggle('active', button.dataset.filter === value);
+  });
+  renderProducts();
+}
+
+document.querySelectorAll('.filter').forEach(button =>
+  button.addEventListener('click', () => setFilter(button.dataset.filter))
+);
+
+document.querySelectorAll('[data-cat]').forEach(link =>
+  link.addEventListener('click', () => setFilter(link.dataset.cat))
+);
+
+document.getElementById('products').addEventListener('click', event => {
+  const button = event.target.closest('[data-add]');
+  if (button) addToCart(button.dataset.add);
+});
+
+function addToCart(id) {
+  const product = products.find(p => String(p.id) === String(id));
+  if (!product) return;
+
+  const item = cart.find(x => String(x.id) === String(id));
+  if (item) item.qty++;
+  else cart.push({ id: product.id, qty: 1 });
+
+  renderCart();
+  document.getElementById('cartCount').textContent =
+    cart.reduce((sum, item) => sum + item.qty, 0);
+  openCart();
+}
+
+function changeQty(id, difference) {
+  const item = cart.find(x => String(x.id) === String(id));
+  if (item) item.qty += difference;
+  cart = cart.filter(x => x.qty > 0);
+
+  renderCart();
+  document.getElementById('cartCount').textContent =
+    cart.reduce((sum, item) => sum + item.qty, 0);
+}
+
+function renderCart() {
+  const el = document.getElementById('cartItems');
+  const foot = document.getElementById('cartFoot');
+
+  if (!cart.length) {
+    el.innerHTML = `
+      <div class="empty">
+        Ton panier est encore vide.<br><br>🐾<br><br>
+        <a href="#boutique" onclick="closeCart()" class="btn">DÉCOUVRIR LES PRODUITS</a>
+      </div>`;
+    foot.innerHTML = '';
+    return;
+  }
+
+  el.innerHTML = cart.map(item => {
+    const p = products.find(product => String(product.id) === String(item.id));
+    return `
+      <div class="cart-line">
+        <div>
+          <b>${escapeHTML(p.name)}</b><br>
+          <span class="notice">${money(p.price)} l’unité</span>
+        </div>
+        <div class="qty">
+          <button onclick="changeQty('${escapeHTML(p.id)}',-1)">−</button>
+          ${item.qty}
+          <button onclick="changeQty('${escapeHTML(p.id)}',1)">+</button>
+        </div>
+      </div>`;
+  }).join('');
+
+  const total = cart.reduce((sum, item) => {
+    const p = products.find(product => String(product.id) === String(item.id));
+    return sum + p.price * item.qty;
+  }, 0);
+
+  foot.innerHTML = `
+    <div class="cart-total"><span>Sous-total</span><span>${money(total)}</span></div>
+    <p class="notice">Le paiement n'est pas encore activé. Aucune commande réelle ne peut être passée pour le moment.</p>
+    <button class="btn" style="width:100%;margin-top:10px"
+      onclick="alert('Le paiement sera activé après la configuration de la boutique.')">
+      CONTINUER
+    </button>`;
+}
+
+function openCart() {
+  document.getElementById('drawerBg').classList.add('open');
+}
+function closeCart() {
+  document.getElementById('drawerBg').classList.remove('open');
+}
+
+document.getElementById('cartOpen').onclick = openCart;
+document.getElementById('cartClose').onclick = closeCart;
+document.getElementById('drawerBg').addEventListener('click', event => {
+  if (event.target.id === 'drawerBg') closeCart();
+});
+
+document.getElementById('newsletter').addEventListener('submit', event => {
+  event.preventDefault();
+  document.getElementById('newsMsg').textContent =
+    'Merci ! Les inscriptions à la newsletter ne sont pas encore activées.';
+});
+
+renderCart();
+loadProducts();
+</script>
